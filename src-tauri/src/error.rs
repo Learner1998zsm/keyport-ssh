@@ -58,6 +58,7 @@ pub mod codes {
     pub const REMOTE_FAILED: &str = "REMOTE_FAILED";
     pub const KNOWN_HOSTS_FAILED: &str = "KNOWN_HOSTS_FAILED";
     pub const TEST_FAILED: &str = "TEST_FAILED";
+    pub const UPDATE_CHECK_FAILED: &str = "UPDATE_CHECK_FAILED";
     pub const INTERNAL: &str = "INTERNAL";
 }
 

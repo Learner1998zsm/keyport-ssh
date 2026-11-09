@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  FileKey2,
   Fingerprint,
   KeyRound,
   LockKeyhole,
@@ -193,6 +194,8 @@ export function AccessModal({
           user: prepare.user,
           port: prepare.port,
           reuseExistingKey: prepare.reusedKey,
+          keyType: prepare.keyType,
+          remoteAuthorizedKeysPath: prepare.remoteAuthorizedKeysPath,
         },
         password: oneTimePassword,
         expectedFingerprint: probe.fingerprint,
@@ -394,6 +397,18 @@ export function AccessModal({
                     </label>
                   ) : null}
 
+                  <div className="access-target">
+                    <FileKey2 size={17} aria-hidden="true" />
+                    <div className="access-target__copy">
+                      <span className="micro-label">DELIVERY TARGET / AUTHORIZED_KEYS</span>
+                      <code>{prepare.remoteAuthorizedKeysPath}</code>
+                      <span>
+                        {prepare.keyType === "rsa" ? "RSA" : "Ed25519"} ·{" "}
+                        {prepare.user}@{prepare.host}
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="field field--full access-password-field">
                     <div className="field__heading">
                       <label htmlFor="one-time-password">服务器登录密码</label>
@@ -495,7 +510,7 @@ export function AccessModal({
                   <span className="progress-dot" /> 一次性密码认证
                 </li>
                 <li>
-                  <span className="progress-dot" /> 写入 authorized_keys 并运行 ssh 试航
+                  <span className="progress-dot" /> 写入 {prepare.remoteAuthorizedKeysPath} 并运行 ssh 试航
                 </li>
               </ul>
               <p>请保持窗口打开。密码已从输入框清除，将在交接结束后不再被引用。</p>

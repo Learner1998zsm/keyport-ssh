@@ -221,6 +221,8 @@ mod tests {
             user: "deploy".into(),
             port,
             reuse_existing_key: false,
+            key_type: Default::default(),
+            remote_authorized_keys_path: None,
         })
         .unwrap()
     }

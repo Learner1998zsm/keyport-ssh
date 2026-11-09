@@ -1,4 +1,5 @@
 import type { ConnectionInput, FieldErrors, FormState } from "../types";
+import { remotePathForForm, validateRemoteAuthorizedKeysPath } from "./remotePath";
 
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const USER_PATTERN = /^[A-Za-z0-9._@+-][A-Za-z0-9._@+-]{0,63}$/;
@@ -34,6 +35,17 @@ export function validateForm(form: FormState): FieldErrors {
     errors.port = "端口必须在 1–65535 之间。";
   }
 
+  if (form.keyType !== "ed25519" && form.keyType !== "rsa") {
+    errors.keyType = "请选择密钥类型。";
+  }
+
+  if (form.remotePathPreset === "custom") {
+    const remotePathError = validateRemoteAuthorizedKeysPath(form.customRemotePath);
+    if (remotePathError) {
+      errors.customRemotePath = remotePathError;
+    }
+  }
+
   return errors;
 }
 
@@ -48,6 +60,8 @@ export function toConnectionInput(form: FormState, reuseExistingKey: boolean): C
     user: form.user.trim(),
     port: Number(form.port),
     reuseExistingKey,
+    keyType: form.keyType,
+    remoteAuthorizedKeysPath: remotePathForForm(form),
   };
 }
 

@@ -2,11 +2,12 @@ import { Check, FolderOpen, Lock, ShieldAlert } from "lucide-react";
 
 import type { EnvironmentReport, JourneyScreen } from "../types";
 import { cx } from "../lib/utils";
+import { APP_VERSION } from "../lib/version";
 import { BrandLockup } from "./Logo";
 import { Spinner, StatusDot } from "./Ui";
 
 const STEPS = [
-  { number: "01", title: "签发", caption: "KEYPAIR", detail: "Ed25519" },
+  { number: "01", title: "签发", caption: "KEYPAIR", detail: "Ed25519 / RSA" },
   { number: "02", title: "托管", caption: "SSH AGENT", detail: "Auto-start" },
   { number: "03", title: "配置", caption: "SSH CONFIG", detail: "Managed block" },
   { number: "04", title: "送达", caption: "DELIVERY", detail: "Public key" },
@@ -119,7 +120,7 @@ export function SideRail({
           <Lock size={12} aria-hidden="true" />
           LOCAL ONLY
         </span>
-        <span>v0.1.0</span>
+        <span>v{APP_VERSION}</span>
         {demo ? <span className="demo-flag">DEMO</span> : null}
       </footer>
     </aside>

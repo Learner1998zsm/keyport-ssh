@@ -10,6 +10,7 @@ import type {
   InstallResult,
   PrepareResult,
   TestResult,
+  UpdateInfo,
 } from "../types";
 import { normalizeError } from "./apiError";
 import { mockApi } from "./mock";
@@ -80,6 +81,20 @@ export const api = {
       return mockApi.openSshFolder();
     }
     return realCommand<void>("open_ssh_folder");
+  },
+
+  async checkUpdate(): Promise<UpdateInfo> {
+    if (isDemo) {
+      return mockApi.checkUpdate();
+    }
+    return realCommand<UpdateInfo>("check_update");
+  },
+
+  async openReleasePage(url: string): Promise<void> {
+    if (isDemo) {
+      return mockApi.openReleasePage(url);
+    }
+    return realCommand<void>("open_release_page", { url });
   },
 };
 

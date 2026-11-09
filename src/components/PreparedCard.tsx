@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  FileKey2,
   Fingerprint,
   FolderOpen,
   KeyRound,
@@ -14,7 +15,6 @@ import type { PrepareResult } from "../types";
 import { CopyButton } from "./Ui";
 
 const STAGE_COPY: Record<string, { title: string; note: string }> = {
-  key: { title: "密钥已签发", note: "Ed25519 密钥对已保存在本机" },
   agent: { title: "ssh-agent 已托管", note: "密钥已加载，登录时自动启动" },
   config: { title: "SSH 配置已写入", note: "受管理的 Host 配置块已就位" },
 };
@@ -32,6 +32,11 @@ export function PreparedCard({
   onOpenFolder: () => void;
   onCopyError: (error: unknown) => void;
 }) {
+  const keyNote =
+    prepare.keyType === "rsa"
+      ? "RSA 密钥对已保存在本机"
+      : "Ed25519 密钥对已保存在本机";
+
   return (
     <section className="paper-card prepared" aria-labelledby="prepared-title">
       <div className="manifest__strip">
@@ -46,7 +51,7 @@ export function PreparedCard({
             <h2 id="prepared-title">密钥已在港。</h2>
             <p className="prepared__lede">
               本机准备完成。接下来输入一次服务器密码，把公钥写进远端
-              <code> authorized_keys</code>，然后我们会替你试航。
+              <code> {prepare.remoteAuthorizedKeysPath}</code>，然后我们会替你试航。
             </p>
           </div>
           <div className="clearance-seal" aria-hidden="true">
@@ -75,7 +80,10 @@ export function PreparedCard({
 
         <ol className="stage-list" aria-label="已完成步骤">
           {prepare.stages.map((stage, index) => {
-            const copy = STAGE_COPY[stage.id] ?? { title: stage.id, note: stage.detail };
+            const copy =
+              stage.id === "key"
+                ? { title: "密钥已签发", note: keyNote }
+                : (STAGE_COPY[stage.id] ?? { title: stage.id, note: stage.detail });
             return (
               <li key={stage.id}>
                 <span className="stage-list__index">{String(index + 1).padStart(2, "0")}</span>
@@ -123,6 +131,13 @@ export function PreparedCard({
               <FolderOpen size={14} aria-hidden="true" />
               打开 .ssh 目录
             </button>
+          </div>
+
+          <div className="remote-file-block">
+            <span className="micro-label">
+              <FileKey2 size={12} aria-hidden="true" /> REMOTE AUTHORIZED_KEYS
+            </span>
+            <code>{prepare.remoteAuthorizedKeysPath}</code>
           </div>
         </div>
 

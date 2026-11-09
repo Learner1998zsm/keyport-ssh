@@ -14,8 +14,14 @@ Keyport SSH 是一个用 **Rust + Tauri 2 + React** 编写的桌面应用。它�
 
 ## 功能
 
-- **Ed25519 密钥签发**：使用系统 `ssh-keygen` 生成 `~/.ssh/id_ed25519_<连接名>`，
-  不覆盖任何已有密钥。
+- **Ed25519 / RSA 密钥签发**：使用系统 `ssh-keygen` 生成
+  `~/.ssh/id_ed25519_<连接名>` 或 `~/.ssh/id_rsa_<连接名>`，不覆盖任何已有密钥。
+  新生成的 RSA 固定为 3072 位，用于不识别 Ed25519 的旧版 Dropbear / 老设备。
+- **可选的远端 authorized_keys 路径**：高级选项提供 OpenSSH 默认
+  `~/.ssh/authorized_keys`、iStoreOS / Dropbear root 预设
+  `/etc/dropbear/authorized_keys`，以及自定义绝对路径或 `~/` 用户目录路径。
+  路径在 Rust 端严格校验并按 POSIX shell 规则引用，远端命令只接受固定模板，
+  避免命令注入。
 - **OpenSSH 环境检查与自动安装**：缺少 OpenSSH 时，Windows 自动请求安装
   `OpenSSH.Client` 可选功能，Linux 通过 `pkexec` + 发行版包管理器安装；macOS
   提示 Xcode Command Line Tools / Homebrew。
@@ -29,8 +35,14 @@ Keyport SSH 是一个用 **Rust + Tauri 2 + React** 编写的桌面应用。它�
   `Host / HostName / User / IdentityFile / IdentitiesOnly / BatchMode /
   ServerAliveInterval`，并自动处理非 22 端口。
 - **一次性密码交接**：通过纯 Rust SSH 客户端完成密码认证，公钥以幂等方式追加到
-  远端 `~/.ssh/authorized_keys`。密码不会写盘、不会记日志，命令结束后主动释放
+  选定的远端 authorized_keys。密码不会写盘、不会记日志，命令结束后主动释放
   内存中的引用。
+- **Dropbear 权限处理**：写入 `/etc/dropbear/authorized_keys` 时会按需创建父目录、
+  确保文件为 `600`，但不会修改 `/etc` 下任何目录的权限；默认的 `~/.ssh` 仍会
+  收紧为 `700`。iStoreOS 等 root 登录设备需要 root 对目标路径有写权限。
+- **检查更新**：主动查询 GitHub Releases 的最新版本，展示版本号、发布日期与
+  版本说明，并提供官方下载入口。只读取公开信息，不上传任何本机数据，也不做
+  静默自动安装。
 - **主机指纹钉住**：首次连接必须显式核对并信任服务器主机指纹；已记录的
   `known_hosts` 指纹不一致时直接中止，绝不把密码发给可能被冒充的主机。
 - **自动试航**：使用新写入的配置执行真实的 `ssh` 连接测试，成功后展示以后可直接
@@ -67,8 +79,10 @@ Keyport 处理的是服务器的入口凭证，因此这里的几个设计是刻
 | 中间人攻击 | 探测主机指纹 → 用户核对 `SHA256` 指纹 → 密码认证前在 SSH handler 内再次比对指纹 |
 | 已知主机被替换 | `known_hosts` 中指纹冲突时无条件中止，不使用 `accept-new` 悄悄放行 |
 | 密码落盘 | 密码只存在于 React state / Rust 参数 / SSH 认证栈中；提交后立即清空输入框，Rust 侧用 `Zeroizing<String>` 包裹，不写日志、不进错误详情 |
+| 远端命令注入 | 远端路径只允许 ASCII 白名单字符，拒绝相对路径、`. / ..`、空路径段与 shell 元字符；路径片段再用单引号 `shell_quote`，命令模板固定，不接受 UI 传入的任意命令 |
+| 误改 `/etc` 权限 | Dropbear 预设只创建父目录并把授权文件设为 `600`；`/etc` 下目录权限一律不修改，只有 `~/.ssh` 会被收紧到 `700` |
+| 静默更新 / 数据外传 | 更新检查只在用户点击时访问 GitHub Releases 的公开 API，不下载、不安装、不上传本机信息；也没有遥测、云端服务或账号 |
 | 沉默的失败 | 每一步都有可读错误、技术详情与恢复建议；密码错误时允许直接重试 |
-| 遥测 | 没有遥测，没有云端服务，没有账号 |
 
 > 初始公钥交接要求服务器仍开放密码登录（password 或 keyboard-interactive）。
 > 完成交接后，Keyport 的配置使用 `IdentityFile` + `IdentitiesOnly yes`，不依赖
@@ -82,9 +96,14 @@ Keyport 处理的是服务器的入口凭证，因此这里的几个设计是刻
 | macOS | 10.15+ | `~/Library/LaunchAgents/dev.keyport.ssh-agent.plist` | 需要 Xcode Command Line Tools（通常已随系统提供） |
 | Linux | 主流桌面发行版 | systemd user unit / XDG Autostart 回退 | 通过 `pkexec` 安装 OpenSSH；依赖 WebKitGTK 运行 Tauri |
 
-服务器端当前支持使用 POSIX shell 的 OpenSSH 服务端（Linux、macOS、BSD 等）。
-Windows OpenSSH Server 的默认 `cmd` shell 尚未适配，因为公钥安装命令使用
-`$HOME`、`grep` 与 `chmod`。
+服务器端当前支持使用 POSIX shell 的 OpenSSH / Dropbear 服务端（Linux、macOS、
+BSD、OpenWrt / iStoreOS 等）。Windows OpenSSH Server 的默认 `cmd` shell 尚未适配，
+因为公钥安装命令使用 `$HOME`、`grep` 与 `chmod`。
+
+> RSA 选项解决的是服务器不支持 Ed25519 时的密钥类型兼容性。如果 Dropbear 极旧，
+> 只接受 SHA-1 的 `ssh-rsa` 签名（没有 rsa-sha2），现代 OpenSSH 客户端可能仍会
+> 拒绝该算法；此时需要在本地 SSH 配置中自行评估并放行 `ssh-rsa`。Keyport 不会
+> 自动放宽本地 OpenSSH 的签名算法策略。
 
 ### 尚未支持
 
@@ -92,7 +111,8 @@ Windows OpenSSH Server 的默认 `cmd` shell 尚未适配，因为公钥安装�
 - SSH 主机证书（host certificate）；
 - 已经配置了非托管 `Host <同名>` 的条目自动迁移（Keyport 会明确报冲突，不擅自改）；
 - 远端清理或吊销公钥的图形化流程；
-- ProxyJump / ProxyCommand 的图形化配置（手写配置块不会被 Keyport 改动）。
+- ProxyJump / ProxyCommand 的图形化配置（手写配置块不会被 Keyport 改动）；
+- 自动下载并静默安装应用更新（当前只检查 GitHub Releases 并跳转到官方下载页）。
 
 ## 快速开始（开发）
 
@@ -141,10 +161,10 @@ Tauri 会在 `src-tauri/target/release/bundle/` 下生成平台安装包。
 
 | 路径 | 变更 |
 | --- | --- |
-| `~/.ssh/id_ed25519_<name>` / `.pub` | 生成新的 Ed25519 密钥对 |
+| `~/.ssh/id_ed25519_<name>` / `.pub` 或 `~/.ssh/id_rsa_<name>` / `.pub` | 生成新的 Ed25519 或 RSA 3072 密钥对 |
 | `~/.ssh/config` | 前置写入带 `# >>> keyport:<name>` / `# <<< keyport:<name> <<<` 标记的托管块；首次修改前创建 `config.keyport.bak` |
 | `~/.ssh/known_hosts` | 用户首次信任主机后追加主机公钥 |
-| `~/.ssh/authorized_keys`（远端） | 幂等追加公钥行 |
+| 远端 `authorized_keys`（默认 `~/.ssh/authorized_keys`，可选 Dropbear 或自定义路径） | 幂等追加公钥行；文件设为 `600`，Dropbear 路径按需创建父目录 |
 | Windows `ssh-agent` 服务 | 启动类型设为 `Automatic` 并启动服务 |
 | macOS `~/Library/LaunchAgents/dev.keyport.ssh-agent.plist` | LaunchAgent 定义 |
 | Linux `~/.config/systemd/user/keyport-ssh-agent.service` 或 `~/.config/autostart/dev.keyport.ssh-agent.desktop` | agent 自启定义 |
@@ -164,13 +184,14 @@ Keyport 采用托管块而不是重写整个配置文件；遇到不完整或冲
 ┌──────────────────────────────▼───────────────────────────────────────────┐
 │ Rust (src-tauri/src)                                                     │
 │  commands.rs        orchestration + one-time password boundary           │
-│  validation.rs      defensive input normalization                         │
-│  keygen.rs          ssh-keygen + public key parsing/fingerprints          │
+│  validation.rs      defensive input normalization + remote path policy    │
+│  keygen.rs          ssh-keygen Ed25519/RSA + key parsing/fingerprints     │
 │  ssh_config.rs      managed, idempotent ~/.ssh/config blocks              │
 │  agent_windows.rs   OpenSSH service + UAC                                 │
 │  agent_unix.rs      launchd / systemd / XDG autostart + shell integration │
 │  remote.rs          host probe, pinned SSH handler, password auth,        │
 │                     authorized_keys install, known_hosts, ssh test        │
+│  update.rs          GitHub Releases version check + safe release links    │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -185,7 +206,11 @@ Rust 端不信任 UI 传来的路径或公钥：完成步骤会根据连接名�
 
 > 自动发布暂时只使用不依赖 AppImage/NSIS 远程打包工具的格式。`tauri-bundler`
 > 仍会下载这两个工具链，且其 GitHub Release 资产下载目前不稳定（会出现 `504`）；
-> 因此 v0.1.0 自动发布优先保证安装包能稳定产出。AppImage/NSIS 可在依赖恢复后重新加入。
+> 因此 v0.2.0 自动发布优先保证安装包能稳定产出。AppImage/NSIS 可在依赖恢复后重新加入。
+
+## 发布记录
+
+各版本的变更与安装包说明见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## License
 

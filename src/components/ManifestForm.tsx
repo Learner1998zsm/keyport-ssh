@@ -2,13 +2,18 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Check,
+  ChevronDown,
   Download,
+  FileKey2,
   Fingerprint,
   Globe2,
+  KeyRound,
   LoaderCircle,
   LockKeyhole,
   Server,
   ShieldCheck,
+  SlidersHorizontal,
   UserRound,
 } from "lucide-react";
 
@@ -19,11 +24,18 @@ import type {
   FormState,
 } from "../types";
 import type { KeyportError } from "../lib/api";
+import {
+  KEY_TYPE_OPTIONS,
+  REMOTE_PATH_NOTES,
+  REMOTE_PATH_OPTIONS,
+  keyFileName,
+  remotePathForForm,
+} from "../lib/remotePath";
 import { validateForm, hasErrors } from "../lib/validation";
 import { cx } from "../lib/utils";
 import { ErrorNotice, Spinner } from "./Ui";
 
-const FIELD_ORDER: FormField[] = ["name", "host", "user", "port"];
+const FIELD_ORDER: FormField[] = ["name", "host", "user", "port", "customRemotePath"];
 
 export function ManifestForm({
   form,
@@ -55,16 +67,19 @@ export function ManifestForm({
   const [touched, setTouched] = useState<Partial<Record<FormField, boolean>>>({});
   const [attempted, setAttempted] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const hostRef = useRef<HTMLInputElement>(null);
   const userRef = useRef<HTMLInputElement>(null);
   const portRef = useRef<HTMLInputElement>(null);
+  const customRemotePathRef = useRef<HTMLInputElement>(null);
 
   const refs = {
     name: nameRef,
     host: hostRef,
     user: userRef,
     port: portRef,
+    customRemotePath: customRemotePathRef,
   };
 
   function refreshErrors(nextForm: FormState) {
@@ -93,10 +108,14 @@ export function ManifestForm({
     setAttempted(true);
     const nextErrors = validateForm(form);
     setErrors(nextErrors);
+    if (nextErrors.keyType || nextErrors.customRemotePath) {
+      setAdvancedOpen(true);
+    }
     if (hasErrors(nextErrors)) {
       const first = FIELD_ORDER.find((field) => nextErrors[field]);
       if (first) {
-        refs[first].current?.focus();
+        const target = refs[first as keyof typeof refs];
+        window.setTimeout(() => target?.current?.focus(), 0);
       }
       return;
     }
@@ -114,6 +133,11 @@ export function ManifestForm({
       : opensshAvailable
         ? "ready"
         : "warning";
+  const keyTypeLabel = form.keyType === "rsa" ? "RSA 3072" : "Ed25519";
+  const effectiveRemotePath = remotePathForForm(form);
+  const remotePathSummary = effectiveRemotePath || "等待填写自定义路径";
+  const customPathError = showError("customRemotePath");
+  const keyPrefix = form.keyType === "rsa" ? "id_rsa_" : "id_ed25519_";
 
   return (
     <section className={cx("paper-card manifest", busy && "is-busy")} aria-labelledby="manifest-title">
@@ -174,7 +198,7 @@ export function ManifestForm({
             </div>
             <div className={cx("control", showError("name") && "control--error")}>
               <span className="control__affix" aria-hidden="true">
-                id_ed25519_
+                {keyPrefix}
               </span>
               <input
                 ref={nameRef}
@@ -294,6 +318,142 @@ export function ManifestForm({
               </div>
               {showError("port") ? <FieldError id="connection-port-error" message={showError("port")!} /> : null}
             </div>
+          </div>
+
+          <div className={cx("advanced", advancedOpen && "advanced--open")}>
+            <button
+              type="button"
+              className="advanced__toggle"
+              aria-expanded={advancedOpen}
+              aria-controls="advanced-options"
+              onClick={() => setAdvancedOpen((current) => !current)}
+            >
+              <span className="advanced__toggle-icon" aria-hidden="true">
+                <SlidersHorizontal size={15} />
+              </span>
+              <span className="advanced__toggle-copy">
+                <strong>高级选项</strong>
+                <span>
+                  {keyTypeLabel} · {remotePathSummary}
+                </span>
+              </span>
+              <ChevronDown size={16} className="advanced__chevron" aria-hidden="true" />
+            </button>
+
+            {advancedOpen ? (
+              <div className="advanced__panel" id="advanced-options">
+                <fieldset className="advanced-group">
+                  <legend>密钥类型</legend>
+                  <p className="advanced-group__hint">
+                    Ed25519 是现代服务器首选；如果旧版 Dropbear 不识别 Ed25519，请改用 RSA。
+                  </p>
+                  <div className="choice-grid" role="radiogroup" aria-label="密钥类型">
+                    {KEY_TYPE_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        className={cx("choice", form.keyType === option.value && "choice--active")}
+                      >
+                        <input
+                          type="radio"
+                          name="key-type"
+                          value={option.value}
+                          checked={form.keyType === option.value}
+                          onChange={() => handleChange("keyType", option.value)}
+                        />
+                        <span className="choice__mark" aria-hidden="true">
+                          <Check size={12} />
+                        </span>
+                        <span className="choice__copy">
+                          <span className="choice__title">
+                            <KeyRound size={13} aria-hidden="true" />
+                            {option.label}
+                            <em className="choice__tag">{option.tag}</em>
+                          </span>
+                          <span className="choice__desc">{option.description}</span>
+                          <span className="choice__path">~/.ssh/{keyFileName(form.name.trim() || "home", option.value)}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {showError("keyType") ? <FieldError id="key-type-error" message={showError("keyType")!} /> : null}
+                </fieldset>
+
+                <fieldset className="advanced-group">
+                  <legend>远端公钥路径</legend>
+                  <p className="advanced-group__hint">
+                    决定公钥追加到服务器上的哪个 authorized_keys 文件。
+                  </p>
+                  <div className="choice-grid choice-grid--paths" role="radiogroup" aria-label="远端公钥路径">
+                    {REMOTE_PATH_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        className={cx(
+                          "choice",
+                          form.remotePathPreset === option.value && "choice--active",
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="remote-path-preset"
+                          value={option.value}
+                          checked={form.remotePathPreset === option.value}
+                          onChange={() => handleChange("remotePathPreset", option.value)}
+                        />
+                        <span className="choice__mark" aria-hidden="true">
+                          <Check size={12} />
+                        </span>
+                        <span className="choice__copy">
+                          <span className="choice__title">
+                            <FileKey2 size={13} aria-hidden="true" />
+                            {option.label}
+                          </span>
+                          <span className="choice__path">{option.path}</span>
+                          <span className="choice__desc">{option.description}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {form.remotePathPreset === "custom" ? (
+                    <div className="field advanced-custom-path">
+                      <div className={cx("control", customPathError && "control--error")}>
+                        <FileKey2 size={17} className="control__icon control__icon--left" aria-hidden="true" />
+                        <input
+                          ref={customRemotePathRef}
+                          id="custom-remote-path"
+                          name="custom-remote-path"
+                          value={form.customRemotePath}
+                          placeholder="/data/ssh/authorized_keys"
+                          spellCheck={false}
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          maxLength={512}
+                          className="has-leading-icon"
+                          aria-label="自定义远端 authorized_keys 路径"
+                          onChange={(event) => handleChange("customRemotePath", event.target.value)}
+                          onBlur={() => handleBlur("customRemotePath")}
+                          aria-invalid={Boolean(customPathError)}
+                          aria-describedby={
+                            customPathError
+                              ? "custom-remote-path-hint custom-remote-path-error"
+                              : "custom-remote-path-hint"
+                          }
+                        />
+                      </div>
+                      <p className="field__hint" id="custom-remote-path-hint">
+                        支持 / 绝对路径或 ~/ 用户目录路径；不能包含空格、引号或 shell 特殊字符。
+                        请确认目标是 authorized_keys 文件，而不要指向其他系统文件。
+                      </p>
+                      {customPathError ? (
+                        <FieldError id="custom-remote-path-error" message={customPathError} />
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <p className="advanced__mode-note">{REMOTE_PATH_NOTES[form.remotePathPreset]}</p>
+                </fieldset>
+              </div>
+            ) : null}
           </div>
 
           <div className="manifest-form__footer">

@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Check,
   Clock3,
+  FileKey2,
   FolderOpen,
   KeyRound,
   LockKeyhole,
@@ -169,7 +170,9 @@ export function ResultView({
             <span className="micro-label">
               <KeyRound size={12} aria-hidden="true" /> CONNECTION RECORD
             </span>
-            <span className="mono-tag">ED25519</span>
+            <span className="mono-tag">
+              {result.keyType === "rsa" ? "RSA" : "ED25519"}
+            </span>
           </div>
           <dl className="record-list">
             <div>
@@ -186,6 +189,12 @@ export function ResultView({
                 <UserRound size={14} aria-hidden="true" /> IDENTITY
               </dt>
               <dd>{result.keyPath}</dd>
+            </div>
+            <div>
+              <dt>
+                <FileKey2 size={14} aria-hidden="true" /> REMOTE FILE
+              </dt>
+              <dd>{result.remoteAuthorizedKeysPath}</dd>
             </div>
             <div>
               <dt>

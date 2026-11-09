@@ -15,7 +15,7 @@ use crate::model::{HostProbe, HostTrustStatus, TestResult};
 use crate::openssh::OpenSsh;
 use crate::paths::SshPaths;
 use crate::util::{shell_quote, truncate};
-use crate::validation::ValidatedConnection;
+use crate::validation::{AuthorizedKeysTarget, ValidatedConnection};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const AUTH_TIMEOUT: Duration = Duration::from_secs(35);
@@ -285,7 +285,7 @@ pub async fn install_public_key(
         return Err(error);
     }
 
-    let command = authorized_keys_command(public_key);
+    let command = authorized_keys_command(public_key, &connection.authorized_keys);
     let remote = timeout(REMOTE_TIMEOUT, run_remote_command(&session, &command)).await;
     let remote_result = match remote {
         Ok(result) => result,
@@ -301,18 +301,32 @@ pub async fn install_public_key(
         }
     };
     match remote_result {
-        Ok(result) if result.exit_code == Some(0) => {}
+        Ok(result) if result.exit_code == Some(0) && result.stdout.contains(KEYPORT_OK_MARKER) => {}
         Ok(result) => {
             let _ = session
                 .disconnect(Disconnect::ByApplication, "keyport remote failed", "en")
                 .await;
+            let target = connection.authorized_keys.display();
+            let hint = if connection.authorized_keys.is_dropbear_default() {
+                format!(
+                    "Dropbear / iStoreOS 的 {target} 通常只有 root 可写。请使用 root 登录，或改选 ~/.ssh/authorized_keys。"
+                )
+            } else if connection.authorized_keys.is_under_etc() {
+                format!(
+                    "{target} 位于 /etc 下，通常只有 root 可写。请使用 root 登录，或改选用户目录中的路径。"
+                )
+            } else {
+                format!(
+                    "请确认登录用户对 {target} 及其父目录拥有写权限，且服务器使用 POSIX shell。"
+                )
+            };
             return Err(CommandError::new(
                 codes::REMOTE_FAILED,
                 "公钥安装命令在服务器上执行失败。",
             )
-            .hint("请确认登录用户拥有 ~/.ssh/authorized_keys 的写权限，且服务器使用 POSIX shell。")
+            .hint(hint)
             .detail(format!(
-                "exit code: {:?}\nstdout:\n{}\nstderr:\n{}",
+                "target: {target}\nexit code: {:?}\nstdout:\n{}\nstderr:\n{}",
                 result.exit_code,
                 truncate(&result.stdout, 3000),
                 truncate(&result.stderr, 3000)
@@ -479,10 +493,20 @@ fn append_capped(buffer: &mut Vec<u8>, data: &[u8]) {
     }
 }
 
-pub fn authorized_keys_command(public_key: &str) -> String {
+pub fn authorized_keys_command(public_key: &str, target: &AuthorizedKeysTarget) -> String {
     let quoted_key = shell_quote(public_key.trim());
+    let target_expr = target.target_shell_expr();
+    let parent_expr = target.parent_shell_expr();
+    // OpenSSH requires ~/.ssh itself to be private. /etc (including
+    // /etc/dropbear on iStoreOS) is deliberately left untouched: changing
+    // directory modes there can break the system.
+    let tighten_parent = if target.tighten_home_ssh_dir() {
+        "chmod 700 -- \"$keyport_dir\"; "
+    } else {
+        ""
+    };
     format!(
-        "set -e; umask 077; mkdir -p \"$HOME/.ssh\"; touch \"$HOME/.ssh/authorized_keys\"; chmod 700 \"$HOME/.ssh\"; chmod 600 \"$HOME/.ssh/authorized_keys\"; key={quoted_key}; if ! grep -qxF \"$key\" \"$HOME/.ssh/authorized_keys\"; then printf '%s\\n' \"$key\" >> \"$HOME/.ssh/authorized_keys\"; fi; printf '{marker}\\n'",
+        "set -e; umask 077; keyport_target={target_expr}; keyport_dir={parent_expr}; mkdir -p -- \"$keyport_dir\"; {tighten_parent}touch -- \"$keyport_target\"; chmod 600 -- \"$keyport_target\"; keyport_key={quoted_key}; if ! grep -qxF -- \"$keyport_key\" \"$keyport_target\"; then printf '%s\\n' \"$keyport_key\" >> \"$keyport_target\"; fi; printf '{marker}\\n'",
         marker = KEYPORT_OK_MARKER
     )
 }
@@ -585,16 +609,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn install_command_quotes_the_public_key() {
+    fn install_command_quotes_the_public_key_and_default_path() {
         let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample keyport:test's";
-        let command = authorized_keys_command(key);
+        let target = AuthorizedKeysTarget::parse(Some("~/.ssh/authorized_keys")).unwrap();
+        let command = authorized_keys_command(key, &target);
         assert!(command.contains("set -e"));
         assert!(command.contains("chmod 600"));
         assert!(command.contains("grep -qxF"));
         assert!(command.contains("KEYPORT_OK"));
+        assert!(command.contains("chmod 700 -- \"$keyport_dir\""));
+        assert!(command.contains("\"$HOME\"/'.ssh/authorized_keys'"));
         assert!(
             command.contains("'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample keyport:test'\\''s'")
         );
+    }
+
+    #[test]
+    fn dropbear_path_creates_parent_but_never_chmods_etc() {
+        let key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ keyport:router";
+        let target = AuthorizedKeysTarget::parse(Some("/etc/dropbear/authorized_keys")).unwrap();
+        let command = authorized_keys_command(key, &target);
+        assert!(command.contains("mkdir -p -- \"$keyport_dir\""));
+        assert!(command.contains("'/etc/dropbear'"));
+        assert!(command.contains("'/etc/dropbear/authorized_keys'"));
+        assert!(command.contains("chmod 600"));
+        assert!(!command.contains("chmod 700"));
+    }
+
+    #[test]
+    fn custom_path_is_shell_quoted() {
+        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample keyport:test";
+        let target = AuthorizedKeysTarget::parse(Some("/data/ssh/authorized_keys_2")).unwrap();
+        let command = authorized_keys_command(key, &target);
+        assert!(command.contains("keyport_target='/data/ssh/authorized_keys_2'"));
+        assert!(command.contains("keyport_dir='/data/ssh'"));
+        assert!(!command.contains("chmod 700"));
+        assert!(AuthorizedKeysTarget::parse(Some("/data/authorized keys")).is_err());
     }
 
     #[test]

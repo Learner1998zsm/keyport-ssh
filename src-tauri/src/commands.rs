@@ -13,6 +13,7 @@ use crate::openssh::OpenSsh;
 use crate::paths::SshPaths;
 use crate::remote;
 use crate::ssh_config;
+use crate::update::{self, UpdateInfo};
 use crate::util::truncate;
 use crate::validation::{
     normalize_host, normalize_name, validate_expected_fingerprint, ValidatedConnection,
@@ -77,6 +78,7 @@ pub async fn prepare_connection(input: ConnectionInput) -> AppResult<PrepareResu
         &paths,
         &connection.alias,
         &connection.key_filename,
+        connection.key_type,
         input.reuse_existing_key,
     )?;
 
@@ -119,6 +121,8 @@ pub async fn prepare_connection(input: ConnectionInput) -> AppResult<PrepareResu
         public_key: generated.public_key,
         fingerprint: generated.fingerprint,
         algorithm: generated.algorithm,
+        key_type: connection.key_type,
+        remote_authorized_keys_path: connection.authorized_keys.display().to_string(),
         config_path: config.path,
         known_hosts_path: paths.display_known_hosts(),
         reused_key: generated.reused,
@@ -165,6 +169,7 @@ pub async fn finish_setup(input: FinishInput) -> AppResult<FinishResult> {
         &paths,
         &connection.alias,
         &connection.key_filename,
+        connection.key_type,
     )?;
 
     // Re-apply the managed config block, so a manually edited config can never
@@ -195,6 +200,8 @@ pub async fn finish_setup(input: FinishInput) -> AppResult<FinishResult> {
         port: connection.port,
         connect_command: connection.connect_command(),
         key_path: crate::paths::display_path(&generated.private_path),
+        key_type: connection.key_type,
+        remote_authorized_keys_path: connection.authorized_keys.display().to_string(),
         config_path: config.path,
         known_hosts_path: paths.display_known_hosts(),
         fingerprint: generated.fingerprint,
@@ -218,6 +225,22 @@ pub fn open_ssh_folder() -> AppResult<()> {
         CommandError::new(codes::INTERNAL, "无法打开 SSH 目录。").detail(error.to_string())
     })?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn check_update() -> AppResult<UpdateInfo> {
+    // ureq is blocking; run it off the Tauri runtime so the window stays
+    // responsive while GitHub is queried.
+    tauri::async_runtime::spawn_blocking(update::check_for_update)
+        .await
+        .map_err(|error| {
+            CommandError::new(codes::INTERNAL, "检查更新任务没有完成。").detail(error.to_string())
+        })?
+}
+
+#[tauri::command]
+pub fn open_release_page(url: String) -> AppResult<()> {
+    update::open_release_page(&url)
 }
 
 fn environment_report(openssh: &OpenSsh) -> AppResult<EnvironmentReport> {

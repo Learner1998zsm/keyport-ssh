@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowUpRight,
+  DownloadCloud,
   FolderOpen,
   KeyRound,
   LockKeyhole,
@@ -15,9 +16,11 @@ import { ManifestForm } from "./components/ManifestForm";
 import { PreparedCard } from "./components/PreparedCard";
 import { ResultView } from "./components/ResultView";
 import { SideRail } from "./components/SideRail";
+import { UpdateModal } from "./components/UpdateModal";
 import { VoyageCard } from "./components/VoyageCard";
 import { Spinner } from "./components/Ui";
 import { api, isDemo, normalizeError, type KeyportError } from "./lib/api";
+import { RELEASES_PAGE_URL, APP_VERSION } from "./lib/version";
 import { cx } from "./lib/utils";
 import { toConnectionInput } from "./lib/validation";
 import type {
@@ -28,6 +31,7 @@ import type {
   JourneyScreen,
   PrepareResult,
   ToastMessage,
+  UpdateInfo,
 } from "./types";
 
 const EMPTY_FORM: FormState = {
@@ -35,6 +39,9 @@ const EMPTY_FORM: FormState = {
   host: "",
   user: "",
   port: "22",
+  keyType: "ed25519",
+  remotePathPreset: "openssh",
+  customRemotePath: "",
 };
 
 export default function App() {
@@ -53,6 +60,10 @@ export default function App() {
   const [reuseCandidate, setReuseCandidate] = useState<KeyportError | null>(null);
   const [retryingTest, setRetryingTest] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<KeyportError | null>(null);
   const toastTimer = useRef<number | null>(null);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -227,6 +238,40 @@ export default function App() {
     notify(`复制失败：${normalizeError(error).message}`, "danger");
   }
 
+  async function runUpdateCheck() {
+    if (updateChecking) {
+      return;
+    }
+    setUpdateChecking(true);
+    setUpdateError(null);
+    try {
+      const info = await api.checkUpdate();
+      setUpdateInfo(info);
+    } catch (error) {
+      setUpdateError(normalizeError(error));
+    } finally {
+      setUpdateChecking(false);
+    }
+  }
+
+  function handleOpenUpdate() {
+    setUpdateOpen(true);
+    if (!updateInfo && !updateChecking) {
+      void runUpdateCheck();
+    }
+  }
+
+  async function handleOpenRelease(url: string) {
+    try {
+      await api.openReleasePage(url);
+      if (isDemo) {
+        notify("预览模式下不会真的打开浏览器。", "neutral");
+      }
+    } catch (error) {
+      notify(normalizeError(error).message, "danger");
+    }
+  }
+
   return (
     <div className="app">
       <a className="skip-link" href="#main">
@@ -269,7 +314,23 @@ export default function App() {
             >
               <RefreshCw size={16} className={environmentLoading ? "spin" : undefined} aria-hidden="true" />
             </button>
-            <span className="topbar__version">KEYPORT / 0.1</span>
+            <button
+              type="button"
+              className={cx("version-button", updateInfo?.updateAvailable && "version-button--update")}
+              onClick={handleOpenUpdate}
+              aria-label={updateInfo?.updateAvailable ? "发现新版本，查看更新" : "检查更新"}
+              title="检查更新"
+            >
+              {updateInfo?.updateAvailable ? (
+                <span className="version-button__dot" aria-hidden="true" />
+              ) : (
+                <DownloadCloud size={13} aria-hidden="true" />
+              )}
+              <span>v{APP_VERSION}</span>
+              <span className="version-button__label">
+                {updateInfo?.updateAvailable ? "有更新" : "检查更新"}
+              </span>
+            </button>
           </div>
         </header>
 
@@ -335,6 +396,17 @@ export default function App() {
         onFinished={handleFinished}
       />
 
+      <UpdateModal
+        open={updateOpen}
+        checking={updateChecking}
+        info={updateInfo}
+        error={updateError}
+        onClose={() => setUpdateOpen(false)}
+        onRetry={() => void runUpdateCheck()}
+        onOpenRelease={(url) => void handleOpenRelease(url)}
+        onOpenAllReleases={() => void handleOpenRelease(RELEASES_PAGE_URL)}
+      />
+
       <ReuseDialog
         error={reuseCandidate}
         busy={preparing}
@@ -371,11 +443,11 @@ function Hero({ environment }: { environment: EnvironmentReport | null }) {
           needs a <em>harbor.</em>
         </h1>
         <p className="hero__lede">
-          生成一把 Ed25519 密钥，自动托管到 ssh-agent，写好 SSH 配置，
-          再安全地把它送抵你的服务器。
+          生成 Ed25519 或 RSA 密钥，自动托管到 ssh-agent，写好 SSH 配置，
+          再把公钥安全地送到你指定的 authorized_keys。
         </p>
         <div className="hero__specs" aria-label="安全特性">
-          <span>ED25519</span>
+          <span>ED25519 / RSA</span>
           <span className="hero__spec-dot" aria-hidden="true" />
           <span>ONE-TIME PASSWORD</span>
           <span className="hero__spec-dot" aria-hidden="true" />

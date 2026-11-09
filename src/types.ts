@@ -1,3 +1,7 @@
+export type KeyType = "ed25519" | "rsa";
+
+export type RemotePathPreset = "openssh" | "dropbear" | "custom";
+
 export interface OpenSshInfo {
   available: boolean;
   version: string | null;
@@ -43,6 +47,8 @@ export interface PrepareResult {
   publicKey: string;
   fingerprint: string;
   algorithm: string;
+  keyType: KeyType;
+  remoteAuthorizedKeysPath: string;
   configPath: string;
   knownHostsPath: string;
   reusedKey: boolean;
@@ -85,6 +91,8 @@ export interface FinishResult {
   port: number;
   connectCommand: string;
   keyPath: string;
+  keyType: KeyType;
+  remoteAuthorizedKeysPath: string;
   configPath: string;
   knownHostsPath: string;
   fingerprint: string;
@@ -103,6 +111,8 @@ export interface ConnectionInput {
   user: string;
   port: number;
   reuseExistingKey: boolean;
+  keyType: KeyType;
+  remoteAuthorizedKeysPath: string;
 }
 
 export interface FinishInput {
@@ -117,6 +127,20 @@ export interface FormState {
   host: string;
   user: string;
   port: string;
+  keyType: KeyType;
+  remotePathPreset: RemotePathPreset;
+  customRemotePath: string;
+}
+
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  releaseName: string | null;
+  releaseUrl: string;
+  downloadUrl: string;
+  releaseNotes: string | null;
+  publishedAt: string | null;
 }
 
 export type FormField = keyof FormState;

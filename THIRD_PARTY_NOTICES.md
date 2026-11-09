@@ -11,6 +11,8 @@ dependencies include:
 | [Vite](https://vite.dev/) | MIT | Frontend build |
 | [russh](https://github.com/warp-tech/russh) | Apache-2.0 | Native SSH client |
 | [ssh-key](https://github.com/RustCrypto/SSH) | Apache-2.0 / MIT | SSH key parsing |
+| [ureq](https://github.com/algesten/ureq) | MIT / Apache-2.0 | GitHub Releases update check |
+| [semver](https://github.com/dtolnay/semver) | MIT / Apache-2.0 | Release version comparison |
 | [Lucide](https://lucide.dev/) | ISC | Interface icons |
 | [Bricolage Grotesque](https://fonts.google.com/specimen/Bricolage+Grotesque) | SIL Open Font License 1.1 | Display type |
 | [Instrument Sans](https://fonts.google.com/specimen/Instrument+Sans) | SIL Open Font License 1.1 | Interface type |

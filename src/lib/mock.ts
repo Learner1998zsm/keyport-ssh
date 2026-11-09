@@ -1,14 +1,19 @@
 import type {
   AgentStatus,
+  ConnectionInput,
   EnvironmentReport,
   FinishInput,
   FinishResult,
   HostProbe,
   InstallResult,
+  KeyType,
   PrepareResult,
   TestResult,
+  UpdateInfo,
 } from "../types";
 import { KeyportError } from "./apiError";
+import { OPENSSH_AUTHORIZED_KEYS_PATH, keyFileName } from "./remotePath";
+import { APP_VERSION, RELEASES_PAGE_URL } from "./version";
 
 const MOCK_FINGERPRINT = "SHA256:q3vT0V0D4C3F8aH2mJ5nK7pQ9rS1tU4wX6yZ8bC0dE2";
 
@@ -65,26 +70,41 @@ let mockEnv: EnvironmentReport = {
 const preparedNames = new Set<string>();
 let mockHostKnown = false;
 
-function prepareResult(name: string, host: string, user: string, port: number, reused: boolean): PrepareResult {
+function prepareResult(
+  name: string,
+  host: string,
+  user: string,
+  port: number,
+  reused: boolean,
+  keyType: KeyType,
+  remoteAuthorizedKeysPath: string,
+): PrepareResult {
   const paths = pathInfo();
-  const keyPath = `${paths.sshDir}${paths.sep}id_ed25519_${name}`;
+  const keyName = keyFileName(name, keyType);
+  const keyPath = `${paths.sshDir}${paths.sep}${keyName}`;
   const configBlock = `Host ${name}
     HostName ${host}
     User ${user}
-${port === 22 ? "" : `    Port ${port}\n`}    IdentityFile ~/.ssh/id_ed25519_${name}
+${port === 22 ? "" : `    Port ${port}\n`}    IdentityFile ~/.ssh/${keyName}
     IdentitiesOnly yes
     BatchMode yes
     ServerAliveInterval 30
 `;
+  const publicKey =
+    keyType === "rsa"
+      ? `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQExampleKeyportDemoRsaFingerprint keyport:${name}`
+      : `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyportDemoFingerprint keyport:${name}`;
   return {
     alias: name,
     host,
     user,
     port,
     keyPath,
-    publicKey: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyportDemoFingerprint keyport:${name}`,
+    publicKey,
     fingerprint: MOCK_FINGERPRINT,
-    algorithm: "ssh-ed25519",
+    algorithm: keyType === "rsa" ? "ssh-rsa" : "ssh-ed25519",
+    keyType,
+    remoteAuthorizedKeysPath,
     configPath: paths.configPath,
     knownHostsPath: paths.knownHostsPath,
     reusedKey: reused,
@@ -128,30 +148,27 @@ export const mockApi = {
     };
   },
 
-  async prepareConnection(input: {
-    name: string;
-    host: string;
-    user: string;
-    port: number;
-    reuseExistingKey: boolean;
-  }): Promise<PrepareResult> {
+  async prepareConnection(input: ConnectionInput): Promise<PrepareResult> {
     await delay(1150);
-    const existed = preparedNames.has(input.name);
+    const preparedName = `${input.keyType}:${input.name}`;
+    const existed = preparedNames.has(preparedName);
     if (existed && !input.reuseExistingKey) {
       throw new KeyportError(
         "KEY_EXISTS",
         "同名连接密钥已经存在，Keyport 不会覆盖它。",
         "选择“复用现有密钥”继续，或换一个连接名称重新生成。",
-        `${pathInfo().sshDir}${pathInfo().sep}id_ed25519_${input.name}`,
+        `${pathInfo().sshDir}${pathInfo().sep}${keyFileName(input.name, input.keyType)}`,
       );
     }
-    preparedNames.add(input.name);
+    preparedNames.add(preparedName);
     return prepareResult(
       input.name,
       input.host,
       input.user,
       input.port,
       existed,
+      input.keyType,
+      input.remoteAuthorizedKeysPath || OPENSSH_AUTHORIZED_KEYS_PATH,
     );
   },
 
@@ -198,7 +215,12 @@ export const mockApi = {
       user: input.connection.user,
       port: input.connection.port,
       connectCommand: `ssh ${input.connection.name}`,
-      keyPath: `${pathInfo().sshDir}${pathInfo().sep}id_ed25519_${input.connection.name}`,
+      keyPath: `${pathInfo().sshDir}${pathInfo().sep}${keyFileName(
+        input.connection.name,
+        input.connection.keyType,
+      )}`,
+      keyType: input.connection.keyType,
+      remoteAuthorizedKeysPath: input.connection.remoteAuthorizedKeysPath,
       configPath: pathInfo().configPath,
       knownHostsPath: pathInfo().knownHostsPath,
       fingerprint: MOCK_FINGERPRINT,
@@ -220,5 +242,25 @@ export const mockApi = {
 
   async openSshFolder(): Promise<void> {
     await delay(100);
+  },
+
+  async checkUpdate(): Promise<UpdateInfo> {
+    await delay(750);
+    const latestVersion = "0.2.0";
+    return {
+      currentVersion: APP_VERSION,
+      latestVersion,
+      updateAvailable: latestVersion !== APP_VERSION,
+      releaseName: `Keyport SSH v${latestVersion}`,
+      releaseUrl: `${RELEASES_PAGE_URL}/tag/v${latestVersion}`,
+      downloadUrl: `${RELEASES_PAGE_URL}/tag/v${latestVersion}`,
+      releaseNotes:
+        "预览数据：这是 mock 后端返回的更新说明。\n\n- 新增远端 authorized_keys 路径预设\n- 支持 RSA 3072 密钥\n- 提升提示文字可读性",
+      publishedAt: new Date().toISOString(),
+    };
+  },
+
+  async openReleasePage(_url: string): Promise<void> {
+    await delay(150);
   },
 };

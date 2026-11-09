@@ -7,12 +7,13 @@ mod openssh;
 mod paths;
 mod remote;
 mod ssh_config;
+mod update;
 mod util;
 mod validation;
 
 use commands::{
-    diagnose, finish_setup, install_openssh, open_ssh_folder, prepare_connection, probe_host,
-    test_connection,
+    check_update, diagnose, finish_setup, install_openssh, open_release_page, open_ssh_folder,
+    prepare_connection, probe_host, test_connection,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,7 +27,9 @@ pub fn run() {
             probe_host,
             finish_setup,
             test_connection,
-            open_ssh_folder
+            open_ssh_folder,
+            check_update,
+            open_release_page
         ])
         .run(tauri::generate_context!())
         .expect("error while running Keyport SSH");

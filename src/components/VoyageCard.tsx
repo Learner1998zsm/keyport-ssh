@@ -1,6 +1,7 @@
 import { KeyRound, LockKeyhole, Radio } from "lucide-react";
 
 import type { FormState, PrepareResult } from "../types";
+import { keyFileName, remotePathForForm } from "../lib/remotePath";
 import { cx, shortFingerprint } from "../lib/utils";
 
 export function VoyageCard({
@@ -14,7 +15,10 @@ export function VoyageCard({
   const host = (prepare?.host ?? form.host.trim()) || "target.host";
   const user = (prepare?.user ?? form.user.trim()) || "user";
   const port = prepare?.port ?? (Number(form.port) || 22);
-  const keyName = `id_ed25519_${alias}`;
+  const keyType = prepare?.keyType ?? form.keyType;
+  const keyName = keyFileName(alias, keyType);
+  const remotePath =
+    prepare?.remoteAuthorizedKeysPath ?? remotePathForForm(form);
   const target = `${user}@${host}${port === 22 ? "" : `:${port}`}`;
   const fingerprint = prepare?.fingerprint;
   const ready = prepare !== null;
@@ -81,11 +85,15 @@ export function VoyageCard({
           </div>
           <div>
             <dt>CIPHER</dt>
-            <dd>Ed25519</dd>
+            <dd>{keyType === "rsa" ? "RSA" : "Ed25519"}</dd>
           </div>
           <div>
             <dt>AGENT</dt>
             <dd>{ready ? "Pinned · loaded" : "Pending"}</dd>
+          </div>
+          <div>
+            <dt>REMOTE FILE</dt>
+            <dd>{remotePath || "custom path"}</dd>
           </div>
         </dl>
 
@@ -128,7 +136,7 @@ export function VoyageCard({
         <div className="voyage-stamp" aria-hidden="true">
           <span>KEYPORT</span>
           <strong>ON<br />BOARD</strong>
-          <span>ED25519</span>
+          <span>{keyType === "rsa" ? "RSA" : "ED25519"}</span>
         </div>
       ) : null}
     </aside>

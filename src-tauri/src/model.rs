@@ -4,6 +4,46 @@ fn default_port() -> u16 {
     22
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyType {
+    #[default]
+    Ed25519,
+    Rsa,
+}
+
+impl KeyType {
+    /// File name prefix inside ~/.ssh. RSA keys deliberately use a separate
+    /// prefix so switching key type never reuses a key of the wrong algorithm.
+    pub fn filename_prefix(self) -> &'static str {
+        match self {
+            KeyType::Ed25519 => "id_ed25519",
+            KeyType::Rsa => "id_rsa",
+        }
+    }
+
+    pub fn keygen_algorithm(self) -> &'static str {
+        match self {
+            KeyType::Ed25519 => "ed25519",
+            KeyType::Rsa => "rsa",
+        }
+    }
+
+    pub fn public_key_prefix(self) -> &'static str {
+        match self {
+            KeyType::Ed25519 => "ssh-ed25519 ",
+            KeyType::Rsa => "ssh-rsa ",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            KeyType::Ed25519 => "Ed25519",
+            KeyType::Rsa => "RSA 3072",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionInput {
@@ -14,6 +54,11 @@ pub struct ConnectionInput {
     pub port: u16,
     #[serde(default)]
     pub reuse_existing_key: bool,
+    #[serde(default)]
+    pub key_type: KeyType,
+    /// `None` keeps the OpenSSH default (~/.ssh/authorized_keys).
+    #[serde(default)]
+    pub remote_authorized_keys_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,6 +150,8 @@ pub struct PrepareResult {
     pub public_key: String,
     pub fingerprint: String,
     pub algorithm: String,
+    pub key_type: KeyType,
+    pub remote_authorized_keys_path: String,
     pub config_path: String,
     pub known_hosts_path: String,
     pub reused_key: bool,
@@ -159,6 +206,8 @@ pub struct FinishResult {
     pub port: u16,
     pub connect_command: String,
     pub key_path: String,
+    pub key_type: KeyType,
+    pub remote_authorized_keys_path: String,
     pub config_path: String,
     pub known_hosts_path: String,
     pub fingerprint: String,

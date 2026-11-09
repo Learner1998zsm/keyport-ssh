@@ -6,6 +6,7 @@ use russh::keys::ssh_key::PublicKey;
 use russh::keys::HashAlg;
 
 use crate::error::{codes, AppResult, CommandError};
+use crate::model::KeyType;
 use crate::openssh::OpenSsh;
 use crate::paths::{display_path, SshPaths};
 use crate::util::{combined_output, run_output};
@@ -24,6 +25,7 @@ pub fn prepare_key(
     paths: &SshPaths,
     alias: &str,
     key_filename: &str,
+    key_type: KeyType,
     reuse_existing: bool,
 ) -> AppResult<GeneratedKey> {
     paths.ensure_ssh_dir()?;
@@ -59,17 +61,14 @@ pub fn prepare_key(
         let comment = format!("keyport:{alias}");
         let private_path_arg = display_path(&private_path);
         let mut command = Command::new(&provider.keygen);
-        command.args([
-            "-q",
-            "-t",
-            "ed25519",
-            "-f",
-            &private_path_arg,
-            "-N",
-            "",
-            "-C",
-            &comment,
-        ]);
+        let mut args = vec!["-q", "-t", key_type.keygen_algorithm()];
+        if key_type == KeyType::Rsa {
+            // 3072-bit RSA is supported by old Dropbear builds while remaining a
+            // sensible default for hosts that cannot do Ed25519.
+            args.extend(["-b", "3072"]);
+        }
+        args.extend(["-f", &private_path_arg, "-N", "", "-C", &comment]);
+        command.args(args);
         let output = run_output(&mut command, "无法启动 ssh-keygen。")?;
         if !output.status.success() {
             return Err(
@@ -85,12 +84,16 @@ pub fn prepare_key(
 
     apply_key_permissions(&private_path, &public_path)?;
     let public_key = read_public_key(&public_path)?;
-    if !public_key.starts_with("ssh-ed25519 ") {
+    if !public_key.starts_with(key_type.public_key_prefix()) {
+        let actual = public_key.split_whitespace().next().unwrap_or("未知类型");
         return Err(CommandError::new(
             codes::KEY_FAILED,
-            "该连接名称对应的现有密钥不是 Ed25519 密钥。",
+            format!(
+                "连接 “{alias}” 已有一把 {actual} 密钥，但本次选择的是 {}。",
+                key_type.label()
+            ),
         )
-        .hint("请换一个连接名称，让 Keyport 生成新的 Ed25519 密钥。"));
+        .hint("请选择匹配的密钥类型，或换一个连接名称生成新密钥。"));
     }
 
     let parsed = PublicKey::from_openssh(&public_key).map_err(|err| {
@@ -117,6 +120,7 @@ pub fn load_existing_key(
     paths: &SshPaths,
     alias: &str,
     key_filename: &str,
+    key_type: KeyType,
 ) -> AppResult<GeneratedKey> {
     let private_path = paths.key_path(key_filename);
     if !private_path.is_file() {
@@ -126,7 +130,7 @@ pub fn load_existing_key(
         )
         .detail(display_path(&private_path)));
     }
-    prepare_key(openssh, paths, alias, key_filename, true)
+    prepare_key(openssh, paths, alias, key_filename, key_type, true)
 }
 
 fn derive_public_key(
