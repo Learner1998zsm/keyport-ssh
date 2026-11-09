@@ -17,10 +17,10 @@ jobs:
         include:
           - name: Windows x64
             platform: windows-latest
-            args: ""
+            args: "--bundles msi"
           - name: Linux x64
             platform: ubuntu-22.04
-            args: ""
+            args: "--bundles deb,rpm"
           - name: macOS universal
             platform: macos-latest
             args: "--target universal-apple-darwin"
@@ -46,56 +46,68 @@ jobs:
       - name: Install macOS targets
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-      # tauri-bundler downloads these two AppImage helpers without retrying.
-      # GitHub's release-asset CDN occasionally answers 504, so fetch & cache
-      # them ourselves before Tauri bundles the AppImage.
-      - name: Cache AppImage bundler tools
-        if: runner.os == 'Linux'
+      # MSI bundling uses a pinned WiX 3.14 toolset that Tauri downloads without
+      # retrying. Pre-fetch it with retries and cache it so a transient CDN
+      # failure cannot break the release.
+      - name: Cache WiX toolset
+        if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
-          path: ~/.cache/tauri
-          key: tauri-appimage-tools-apprun-old-linuxdeploy-07333c6-v1
-      - name: Pre-fetch AppImage bundler tools
-        if: runner.os == 'Linux'
-        shell: bash
+          path: ~\AppData\Local\tauri\WixTools314
+          key: tauri-wix314-binaries-v1
+      - name: Pre-fetch WiX toolset
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          set -euo pipefail
-          TOOLS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
-          mkdir -p "$TOOLS_DIR"
-
-          fetch() {
-            local name="$1"
-            local url="$2"
-            local tmp="$RUNNER_TEMP/$name.part"
-
-            if [ -s "$TOOLS_DIR/$name" ]; then
-              echo "Using cached $name"
-              return 0
-            fi
-
-            for attempt in 1 2 3 4 5; do
-              echo "Downloading $name (attempt $attempt/5)"
-              if curl --fail --location --silent --show-error \
-                --retry 4 --retry-all-errors --retry-delay 4 \
-                --connect-timeout 30 --max-time 300 \
-                --output "$tmp" "$url"; then
-                mv "$tmp" "$TOOLS_DIR/$name"
-                chmod +x "$TOOLS_DIR/$name"
-                return 0
-              fi
-              rm -f "$tmp"
-              sleep $((attempt * 5))
-            done
-
-            echo "Failed to download $name" >&2
-            return 1
+          $ErrorActionPreference = 'Stop'
+          $tools = Join-Path $env:LOCALAPPDATA 'tauri\WixTools314'
+          $required = @(
+            'candle.exe', 'candle.exe.config', 'darice.cub', 'light.exe',
+            'light.exe.config', 'wconsole.dll', 'winterop.dll', 'wix.dll',
+            'WixUIExtension.dll', 'WixUtilExtension.dll'
+          )
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $tools $_)) }
+          if ((Test-Path $tools) -and -not $missing) {
+            Write-Host 'Using cached WiX toolset'
+            exit 0
           }
 
-          fetch "AppRun-x86_64" "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64"
-          fetch "linuxdeploy-07333c6-x86_64.AppImage" "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-07333c6/linuxdeploy-x86_64.AppImage"
+          if (Test-Path $tools) {
+            Remove-Item -LiteralPath $tools -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $tools | Out-Null
 
-          ls -lh "$TOOLS_DIR"
-          sha256sum "$TOOLS_DIR/AppRun-x86_64" "$TOOLS_DIR/linuxdeploy-07333c6-x86_64.AppImage"
+          $zip = Join-Path $env:RUNNER_TEMP 'wix314-binaries.zip'
+          $url = 'https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip'
+          $expectedSha256 = '6ac824e1642d6f7277d0ed7ea09411a508f6116ba6fae0aa5f2c7daa2ff43d31'
+
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+            Write-Host "Downloading WiX toolset (attempt $attempt/5)"
+            & curl.exe --fail --location --silent --show-error `
+              --retry 4 --retry-all-errors --retry-delay 4 `
+              --connect-timeout 30 --max-time 300 `
+              --output $zip $url
+            if ($LASTEXITCODE -eq 0) {
+              break
+            }
+            Start-Sleep -Seconds ($attempt * 5)
+          }
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zip)) {
+            throw 'Failed to download the WiX toolset'
+          }
+
+          $actualSha256 = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "WiX toolset checksum mismatch: $actualSha256"
+          }
+
+          Expand-Archive -LiteralPath $zip -DestinationPath $tools -Force
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $tools $_)) }
+          if ($missing) {
+            throw "WiX toolset is incomplete: $($missing -join ', ')"
+          }
+          Write-Host 'WiX toolset is ready'
       - uses: pnpm/action-setup@v4
         with:
           version: 8.15.6
@@ -118,9 +130,11 @@ jobs:
           releaseBody: |
             Keyport SSH ${{ github.ref_name }}
 
-            自动构建产物：Windows x64、Linux x64 与 macOS universal。
-            首次运行前请确认本机 OpenSSH 与平台构建依赖均可用。
+            - Windows x64: MSI installer
+            - Linux x64: DEB and RPM packages
+            - macOS universal: DMG
 
+            首次运行前请确认本机 OpenSSH 与平台构建依赖均可用。
             完整说明见仓库 README。提交问题请附上操作系统与复现步骤。
           releaseDraft: true
           prerelease: false

@@ -180,8 +180,12 @@ Rust 端不信任 UI 传来的路径或公钥：完成步骤会根据连接名�
 ## GitHub Actions
 
 - `.github/workflows/ci.yml`：前端类型检查/构建 + Rust 测试/Clippy + 三平台应用编译；
-- `.github/workflows/release.yml`：推送 `v*` 标签时构建 Windows、Linux 与
-  macOS（universal）安装包，并创建 GitHub Release。
+- `.github/workflows/release.yml`：推送 `v*` 标签时构建并在草稿 Release 中上传
+  Windows MSI、Linux DEB/RPM 与 macOS universal DMG。
+
+> 自动发布暂时只使用不依赖 AppImage/NSIS 远程打包工具的格式。`tauri-bundler`
+> 仍会下载这两个工具链，且其 GitHub Release 资产下载目前不稳定（会出现 `504`）；
+> 因此 v0.1.0 自动发布优先保证安装包能稳定产出。AppImage/NSIS 可在依赖恢复后重新加入。
 
 ## License
 
