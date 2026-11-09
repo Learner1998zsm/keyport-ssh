@@ -46,6 +46,56 @@ jobs:
       - name: Install macOS targets
         if: runner.os == 'macOS'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      # tauri-bundler downloads these two AppImage helpers without retrying.
+      # GitHub's release-asset CDN occasionally answers 504, so fetch & cache
+      # them ourselves before Tauri bundles the AppImage.
+      - name: Cache AppImage bundler tools
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/tauri
+          key: tauri-appimage-tools-apprun-old-linuxdeploy-07333c6-v1
+      - name: Pre-fetch AppImage bundler tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tauri"
+          mkdir -p "$TOOLS_DIR"
+
+          fetch() {
+            local name="$1"
+            local url="$2"
+            local tmp="$RUNNER_TEMP/$name.part"
+
+            if [ -s "$TOOLS_DIR/$name" ]; then
+              echo "Using cached $name"
+              return 0
+            fi
+
+            for attempt in 1 2 3 4 5; do
+              echo "Downloading $name (attempt $attempt/5)"
+              if curl --fail --location --silent --show-error \
+                --retry 4 --retry-all-errors --retry-delay 4 \
+                --connect-timeout 30 --max-time 300 \
+                --output "$tmp" "$url"; then
+                mv "$tmp" "$TOOLS_DIR/$name"
+                chmod +x "$TOOLS_DIR/$name"
+                return 0
+              fi
+              rm -f "$tmp"
+              sleep $((attempt * 5))
+            done
+
+            echo "Failed to download $name" >&2
+            return 1
+          }
+
+          fetch "AppRun-x86_64" "https://github.com/tauri-apps/binary-releases/releases/download/apprun-old/AppRun-x86_64"
+          fetch "linuxdeploy-07333c6-x86_64.AppImage" "https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy-07333c6/linuxdeploy-x86_64.AppImage"
+
+          ls -lh "$TOOLS_DIR"
+          sha256sum "$TOOLS_DIR/AppRun-x86_64" "$TOOLS_DIR/linuxdeploy-07333c6-x86_64.AppImage"
       - uses: pnpm/action-setup@v4
         with:
           version: 8.15.6
