@@ -1,0 +1,36 @@
+[package]
+name = "keyport"
+version = "0.1.0"
+description = "Keyport SSH — a cross-platform SSH key concierge"
+authors = ["Keyport contributors"]
+edition = "2021"
+rust-version = "1.89"
+license = "MIT"
+repository = "https://github.com/Learner1998zsm/keyport-ssh"
+
+[lib]
+name = "keyport_lib"
+# Desktop-only application. Keeping this as an rlib avoids MinGW's DLL export
+# ordinal limit while still allowing the Tauri binary to link the library.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dirs = "6"
+open = "5"
+russh = { version = "0.65.1", default-features = false, features = ["ring", "rsa"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
+tokio = { version = "1", features = ["net", "process", "sync", "time"] }
+zeroize = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

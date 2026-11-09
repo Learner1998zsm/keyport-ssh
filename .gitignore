@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.npm-cache/
+
+# Frontend build output
+dist/
+*.local
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Local toolchains used while developing on this machine
+.toolchains/
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

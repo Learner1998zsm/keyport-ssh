@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Keyport SSH",
+  "version": "0.1.0",
+  "identifier": "dev.keyport.ssh",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Keyport SSH",
+        "width": 1280,
+        "height": 900,
+        "minWidth": 980,
+        "minHeight": 720,
+        "center": true,
+        "resizable": true,
+        "backgroundColor": "#0b1614"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost",
+      "devCsp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: http://localhost:1420 http://127.0.0.1:1420 ws://localhost:1420 ws://127.0.0.1:1420 ws://localhost:1421; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "SSH keys, delivered.",
+    "longDescription": "Keyport SSH generates an ed25519 key, prepares ssh-agent and ssh config, then delivers the public key to your server using a one-time password.",
+    "copyright": "Copyright © 2026 Keyport contributors",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="harbor" x1="128" y1="72" x2="880" y2="960" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#153129"/>
+      <stop offset="0.55" stop-color="#0B1B16"/>
+      <stop offset="1" stop-color="#06110D"/>
+    </linearGradient>
+    <radialGradient id="signalGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(758 202) rotate(131.7) scale(520)">
+      <stop stop-color="#FF7448" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#FF7448" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="signalRing" x1="308" y1="300" x2="724" y2="730" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8A60"/>
+      <stop offset="1" stop-color="#DE4F24"/>
+    </linearGradient>
+    <filter id="softShadow" x="234" y="244" width="568" height="568" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="34" flood-color="#000000" flood-opacity="0.36"/>
+    </filter>
+  </defs>
+
+  <rect x="20" y="20" width="984" height="984" rx="218" fill="url(#harbor)"/>
+  <rect x="20" y="20" width="984" height="984" rx="218" fill="url(#signalGlow)"/>
+  <rect x="34" y="34" width="956" height="956" rx="205" stroke="#F2ECDF" stroke-opacity="0.08" stroke-width="4"/>
+
+  <circle cx="512" cy="512" r="356" stroke="#D7AA68" stroke-opacity="0.20" stroke-width="3" stroke-dasharray="5 19"/>
+  <circle cx="512" cy="512" r="286" stroke="#F2ECDF" stroke-opacity="0.08" stroke-width="3"/>
+  <path d="M512 92V132M512 892V932M92 512H132M892 512H932" stroke="#F2ECDF" stroke-opacity="0.32" stroke-width="6" stroke-linecap="round"/>
+
+  <g filter="url(#softShadow)">
+    <circle cx="512" cy="512" r="208" stroke="url(#signalRing)" stroke-width="30"/>
+    <circle cx="512" cy="512" r="247" stroke="#F2ECDF" stroke-opacity="0.10" stroke-width="4"/>
+    <path d="M512 360C567.228 360 612 404.772 612 460C612 497.397 591.319 530.07 560.604 546.46L560.6 666C560.6 685.882 544.482 702 524.6 702H499.4C479.518 702 463.4 685.882 463.4 666V546.46C432.681 530.07 412 497.397 412 460C412 404.772 456.772 360 512 360Z" fill="#F2ECDF"/>
+    <circle cx="512" cy="458" r="43" fill="#0B1B16"/>
+    <rect x="492" y="628" width="18" height="14" rx="4" fill="#0B1B16"/>
+    <rect x="514" y="658" width="18" height="14" rx="4" fill="#0B1B16"/>
+  </g>
+
+  <circle cx="763" cy="271" r="15" fill="#FF7448"/>
+  <circle cx="763" cy="271" r="29" stroke="#FF7448" stroke-opacity="0.22" stroke-width="3"/>
+  <circle cx="281" cy="739" r="7" fill="#D7AA68" fill-opacity="0.7"/>
+  <path d="M714 704L754 744M754 704L714 744" stroke="#F2ECDF" stroke-opacity="0.26" stroke-width="5" stroke-linecap="round"/>
+  <path d="M270 285H330M270 310H311" stroke="#D7AA68" stroke-opacity="0.5" stroke-width="5" stroke-linecap="round"/>
+</svg>
